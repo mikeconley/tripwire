@@ -1,0 +1,28 @@
+{
+  "manifest_version": 2,
+  "name": "OPP Tripwire",
+  "description": "TBD",
+  "version": "0.1",
+
+  "applications": {
+    "gecko": {
+      "id": "tripwire@mikeconley.ca",
+      "strict_min_version": "60.1a"
+    }
+  },
+
+  "experiment_apis": {
+    "tripwire": {
+      "schema": "api/schema.json",
+      "parent": {
+      	"scopes": ["addon_parent"],
+      	"script": "api/api.js",
+      	"paths": [["tripwire"]]
+      }
+    }
+  },
+
+  "background": {
+    "scripts": ["background.js"]
+  }
+}
