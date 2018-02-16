@@ -6,21 +6,20 @@
 
   "applications": {
     "gecko": {
-      "id": "tripwire@mikeconley.ca",
-      "strict_min_version": "60.1a"
+      "id": "tripwire@mikeconley.ca"
     }
   },
 
-  "experiment_apis": {
-    "tripwire": {
-      "schema": "api/schema.json",
-      "parent": {
-      	"scopes": ["addon_parent"],
-      	"script": "api/api.js",
-      	"paths": [["tripwire"]]
-      }
-    }
+  "browser_action": {
+    "default_popup": "content/popup.html",
+    "default_title": "Tripwire",
+    "default_icon": "icons/toolbar_off.png"
   },
+
+  "permissions": [
+    "storage",
+    "experiments.tripwire"
+  ],
 
   "background": {
     "scripts": ["background.js"]

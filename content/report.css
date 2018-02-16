@@ -1,0 +1,54 @@
+body {
+  font: message-box;
+}
+
+table {
+  border: 1px solid #999999;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+thead > tr {
+  background-color: #7990c8;
+  color: #FFFFFF;
+  text-align: left;
+}
+
+tbody tr:nth-child(odd) {
+   background-color: #EEEEEE;
+}
+
+td.disabled {
+  color: #AAAAAA;
+}
+
+td, th {
+  border-right: 1px solid #DDDDDD;
+  padding: 5px;
+}
+
+#buttons {
+  margin-bottom: 15px;
+  float: right;
+}
+
+#reset {
+  margin-left: 15px;
+}
+
+#native-reflow:target {
+  color: #FF0000;
+}
+
+td > a {
+  display: block;
+}
+
+#table-controls {
+  margin-bottom: 15px;
+  margin-top: 15px;
+}
+
+tbody.hide-rows-with-bugs > tr[has-bug="true"] {
+  display: none;
+}

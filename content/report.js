@@ -1,0 +1,238 @@
+const ViolationReport = {
+
+  violations: [],
+
+  get $tableBody() {
+    delete this.$tableBody;
+    return this.$tableBody = document.getElementById("table-body");
+  },
+
+  get $reset() {
+    delete this.$reset;
+    return this.$reset = document.getElementById("reset");
+  },
+
+  get $save() {
+    delete this.$save;
+    return this.$save = document.getElementById("save");
+  },
+
+  get $load() {
+    delete this.$load;
+    return this.$load = document.getElementById("load");
+  },
+
+  get $loadInput() {
+    delete this.$loadInput;
+    return this.$loadInput = document.getElementById("load-input");
+  },
+
+  get $status() {
+    delete this.$status;
+    return this.$status = document.getElementById("status");
+  },
+
+  get $hideRowsWithBugs() {
+    delete this.$hideRowsWithBugs;
+    return this.$hideRowsWithBugs = document.getElementById("hide-rows-with-bugs");
+  },
+
+  init() {
+    this.$reset.addEventListener("click", this);
+    this.$save.addEventListener("click", this);
+    this.$load.addEventListener("click", this);
+    this.$loadInput.addEventListener("change", this);
+    this.$hideRowsWithBugs.addEventListener("click", this);
+
+    browser.runtime.sendMessage({ name: "get-signature-data" }).then(sigData => {
+      browser.runtime.sendMessage({ name: "get-violations" }).then(violations => {
+        if (!violations || violations.length == 0) {
+          this.$status.textContent = "No violations detected. Hooray!";
+        } else {
+          this.violations = violations;
+          this.injectReport(violations, sigData);
+          this.$status.textContent = "Sorted from most recent to least.";
+        }
+      });
+    });
+  },
+
+  injectReport(violations, sigData) {
+    this.$tableBody.innerHTML = "";
+
+    let frag = document.createDocumentFragment();
+    for (let i = violations.length - 1; i >= 0; --i) {
+      let violation = violations[i];
+      let row = document.createElement("tr");
+
+      // Violation sequence number
+      let num = document.createElement("td");
+      num.textContent = i;
+      row.appendChild(num);
+
+      let fileABug = document.createElement("td");
+
+      // Stack!
+      let stack = document.createElement("td");
+
+      let stackPre = document.createElement("pre");
+      stackPre.textContent = violation;
+      stack.appendChild(stackPre);
+
+      let signatureToResolve = violation.split("\n").map(line => {
+        return line.replace(/:\d+:\d+$/, "");
+      });
+
+      let uri = this.fileABugURI(violation);
+      let fileABugAnchor = document.createElement("a");
+      fileABugAnchor.href = uri;
+      fileABugAnchor.target = "_blank";
+      fileABugAnchor.textContent = "File a bug";
+
+      let bugs = this.resolveSignatureToBugs(sigData, signatureToResolve);
+
+      if (bugs.exact.length || bugs.partial.length) {
+        // There are pre-existing bugs! Let's tell the user so that
+        // they don't file more bugs than they need to.
+        fileABugAnchor.textContent = "File a new bug anyway";
+
+        for (let bugNum of bugs.exact) {
+          let exactAnchor = document.createElement("a");
+          exactAnchor.href = `https://bugzilla.mozilla.org/show_bug.cgi?id=${bugNum}`;
+          exactAnchor.target = "_blank";
+          exactAnchor.textContent = `Bug ${bugNum}\n`;
+          fileABug.appendChild(exactAnchor);
+        }
+
+        for (let bugNum of bugs.partial) {
+          let partialAnchor = document.createElement("a");
+          partialAnchor.href = `https://bugzilla.mozilla.org/show_bug.cgi?id=${bugNum}`;
+          partialAnchor.target = "_blank";
+          partialAnchor.textContent = `Bug ${bugNum} (partial match)\n`;
+          fileABug.appendChild(partialAnchor);
+        }
+
+        row.setAttribute("has-bug", true);
+      }
+
+      fileABug.appendChild(fileABugAnchor);
+
+      row.appendChild(stack);
+      row.appendChild(fileABug);
+
+      frag.appendChild(row);
+    }
+
+    this.$tableBody.appendChild(frag);
+  },
+
+  resolveSignatureToBugs(sigData, signatureToResolve) {
+    let exact = new Set();
+    let partial = new Set();
+
+    for (let sigEntry of sigData) {
+      let signatures = sigEntry.signatures;
+      let bugs = sigEntry.bugs;
+
+      for (let signature of signatures) {
+        let matchLines = 0;
+        let matchMin = Math.min(signatures.length, signatureToResolve.length);
+        for (let i = 0; i < matchMin; ++i) {
+          if (signature[i] == signatureToResolve[i]) {
+            matchLines++;
+          } else {
+            break;
+          }
+        }
+
+        if (matchLines > 0) {
+          if (matchLines == matchMin) {
+            for (let bug of bugs) {
+              exact.add(bug);
+            }
+            break;
+          } else {
+            for (let bug of bugs) {
+              partial.add(bug);
+            }
+          }
+        }
+      }
+    }
+
+    return { exact: Array.from(exact), partial: Array.from(partial) };
+  },
+
+  reset() {
+    if (confirm("Get rid of recordings so far? The report will remain open.")) {
+      browser.runtime.sendMessage({ name: "reset" });
+    }
+  },
+
+  save() {
+    let blob = new Blob([JSON.stringify(this.violations)], {type: "application/json;charset=utf-8;"});
+    let blobURL = window.URL.createObjectURL(blob);
+    browser.downloads.download({
+      url: blobURL,
+      filename: "violation-report.json",
+      saveAs: true,
+    });
+  },
+
+  load() {
+    this.$loadInput.click();
+  },
+
+  doLoad(event) {
+    let files = event.target.files;
+    let file = files[0];
+    let reader = new FileReader();
+
+    reader.onload = fileContents => {
+      let violations = JSON.parse(fileContents.target.result);
+      this.violations = violations;
+      browser.runtime.sendMessage({ name: "get-signature-data" }).then(sigData => {
+        this.injectReport(this.violations, sigData);
+        this.$status.textContent = "Loaded report from file.";
+      });
+    };
+
+    reader.readAsText(file);
+  },
+
+  fileABugURI(violation) {
+    // TODO
+    let uri = ""; //`https://bugzilla.mozilla.org/enter_bug.cgi?assigned_to=nobody%40mozilla.org&blocked=photon-performance-triage&bug_file_loc=http%3A%2F%2F&bug_ignored=0&bug_severity=normal&bug_status=NEW&cf_fx_iteration=---&cf_fx_points=---&cf_platform_rel=---&cf_status_firefox52=---&cf_status_firefox53=---&cf_status_firefox54=---&cf_status_firefox55=---&cf_status_firefox_esr45=---&cf_status_firefox_esr52=---&cf_tracking_firefox52=---&cf_tracking_firefox53=---&cf_tracking_firefox54=---&cf_tracking_firefox55=---&cf_tracking_firefox_esr45=---&cf_tracking_firefox_esr52=---&cf_tracking_firefox_relnote=---&comment=Here%27s%20the%20stack%3A%0D%0A%0D%0A${fullStack}&component=Untriaged&contenttypemethod=autodetect&contenttypeselection=text%2Fplain&defined_groups=1&flag_type-203=X&flag_type-37=X&flag_type-41=X&flag_type-5=X&flag_type-607=X&flag_type-720=X&flag_type-721=X&flag_type-737=X&flag_type-748=X&flag_type-781=X&flag_type-787=X&flag_type-799=X&flag_type-800=X&flag_type-803=X&flag_type-835=X&flag_type-846=X&flag_type-855=X&flag_type-864=X&flag_type-905=X&flag_type-914=X&flag_type-916=X&form_name=enter_bug&maketemplate=Remember%20values%20as%20bookmarkable%20template&op_sys=Unspecified&priority=--&product=Firefox&rep_platform=Unspecified&short_desc=${time}uninterruptible%20reflow%20at%20${topFrame}&status_whiteboard=%5Bohnoreflow%5D%5Bqf%5D%5Bphoton-performance%5D&target_milestone=---&version=unspecified`;
+    return uri;
+  },
+
+  handleEvent(event) {
+    switch (event.originalTarget.id) {
+      case "reset": {
+        this.reset();
+        break;
+      }
+      case "save": {
+        this.save();
+        break;
+      }
+      case "load": {
+        this.load();
+        break;
+      }
+      case "load-input": {
+        this.doLoad(event);
+        break;
+      }
+      case "hide-rows-with-bugs": {
+        this.$tableBody.classList.toggle("hide-rows-with-bugs",
+                                         event.originalTarget.checked);
+        break;
+      }
+    }
+  }
+};
+
+addEventListener("load", function() {
+  ViolationReport.init();
+});
